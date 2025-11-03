@@ -1,0 +1,79 @@
+// Simplified login UI-only component
+import { MdEmail } from "react-icons/md";
+import { FaFingerprint, FaEye, FaGoogle } from "react-icons/fa";
+
+const Login = () => {
+  return (
+    <div className="w-full h-screen flex items-center justify-center bg-white">
+      <div className="w-[90%] max-w-sm md:max-w-md p-8 bg-white flex-col flex items-center gap-5 rounded-xl shadow-lg border border-gray-200">
+        <h1 className="text-3xl font-bold text-gray-900">Welcome Back</h1>
+        <h2 className="text-2xl font-bold text-gray-900">Sign in to your account</h2>
+
+        <p className="text-sm text-gray-500 text-center">
+          Don’t have an account?{" "}
+          <a href="/register" className="text-green-600 font-medium hover:underline">
+            Sign up
+          </a>
+        </p>
+
+        {/* Form (UI only) */}
+        <form onSubmit={(e) => e.preventDefault()} className="w-full flex flex-col gap-4 mt-3">
+          {/* Email */}
+          <div className="w-full flex items-center border border-gray-300 rounded-lg px-3 py-2 bg-white">
+            <MdEmail className="text-gray-500" />
+            <input
+              type="email"
+              placeholder="Email address"
+              className="bg-transparent border-0 w-full outline-none text-sm md:text-base text-gray-900 ml-2"
+            />
+          </div>
+
+          {/* Password */}
+          <div className="w-full flex items-center border border-gray-300 rounded-lg px-3 py-2 bg-white relative">
+            <FaFingerprint className="text-gray-500" />
+            <input
+              type="password"
+              placeholder="Password"
+              className="bg-transparent border-0 w-full outline-none text-sm md:text-base text-gray-900 ml-2"
+            />
+            <FaEye className="absolute right-3 text-gray-500" />
+          </div>
+
+          {/* Login Button (non-functional) */}
+          <button
+            type="submit"
+            className="w-full p-3 bg-green-600 text-white rounded-lg mt-2 hover:bg-green-700 font-medium"
+          >
+            Login
+          </button>
+        </form>
+
+        <p className="text-sm text-gray-500 text-center mt-3">
+          <a href="/forgot-password" className="text-green-600 hover:underline">
+            Forgot your password?
+          </a>
+        </p>
+
+        {/* Divider */}
+        <div className="relative w-full flex items-center justify-center py-3">
+          <div className="w-2/5 h-[1px] bg-gray-300"></div>
+          <h3 className="text-xs md:text-sm px-3 text-gray-400">Or</h3>
+          <div className="w-2/5 h-[1px] bg-gray-300"></div>
+        </div>
+
+        {/* Google Login (UI only) */}
+        <div className="relative w-full">
+          <button
+            onClick={() => {}}
+            className="flex items-center justify-center gap-2 w-full p-3 bg-gray-100 border border-gray-300 text-gray-700 cursor-pointer rounded-lg hover:bg-gray-200 font-medium"
+          >
+            <FaGoogle className="text-lg md:text-xl text-red-500" />
+            <span className="text-sm md:text-base">Continue with Google</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default Login;
