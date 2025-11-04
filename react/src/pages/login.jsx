@@ -1,8 +1,39 @@
-// Simplified login UI-only component
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { auth, googleProvider } from '../firebase';
+import { signInWithEmailAndPassword, signInWithPopup } from 'firebase/auth';
 import { MdEmail } from "react-icons/md";
 import { FaFingerprint, FaEye, FaGoogle } from "react-icons/fa";
 
 const Login = () => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const navigate = useNavigate();
+
+  const handleEmailLogin = async (e) => {
+    e.preventDefault();
+    setError('');
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+      navigate('/dashboard');
+    } catch (err) {
+      setError('Failed to sign in. Please check your credentials.');
+      console.error(err);
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    setError('');
+    try {
+      await signInWithPopup(auth, googleProvider);
+      navigate('/dashboard');
+    } catch (err) {
+      setError('Failed to sign in with Google.');
+      console.error(err);
+    }
+  };
+
   return (
     <div className="w-full h-screen flex items-center justify-center bg-white">
       <div className="w-[90%] max-w-sm md:max-w-md p-8 bg-white flex-col flex items-center gap-5 rounded-xl shadow-lg border border-gray-200">
@@ -16,12 +47,17 @@ const Login = () => {
           </a>
         </p>
 
-        {/* Form (UI only) */}
-        <form onSubmit={(e) => e.preventDefault()} className="w-full flex flex-col gap-4 mt-3">
+        {error && <p className="text-red-500 text-sm">{error}</p>}
+
+        {/* Form */}
+        <form onSubmit={handleEmailLogin} className="w-full flex flex-col gap-4 mt-3">
           {/* Email */}
           <div className="w-full flex items-center border border-gray-300 rounded-lg px-3 py-2 bg-white">
             <MdEmail className="text-gray-500" />
             <input
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
               type="email"
               placeholder="Email address"
               className="bg-transparent border-0 w-full outline-none text-sm md:text-base text-gray-900 ml-2"
@@ -32,6 +68,9 @@ const Login = () => {
           <div className="w-full flex items-center border border-gray-300 rounded-lg px-3 py-2 bg-white relative">
             <FaFingerprint className="text-gray-500" />
             <input
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
               type="password"
               placeholder="Password"
               className="bg-transparent border-0 w-full outline-none text-sm md:text-base text-gray-900 ml-2"
@@ -39,7 +78,7 @@ const Login = () => {
             <FaEye className="absolute right-3 text-gray-500" />
           </div>
 
-          {/* Login Button (non-functional) */}
+          {/* Login Button */}
           <button
             type="submit"
             className="w-full p-3 bg-green-600 text-white rounded-lg mt-2 hover:bg-green-700 font-medium"
@@ -61,10 +100,10 @@ const Login = () => {
           <div className="w-2/5 h-[1px] bg-gray-300"></div>
         </div>
 
-        {/* Google Login (UI only) */}
+        {/* Google Login */}
         <div className="relative w-full">
           <button
-            onClick={() => {}}
+            onClick={handleGoogleLogin}
             className="flex items-center justify-center gap-2 w-full p-3 bg-gray-100 border border-gray-300 text-gray-700 cursor-pointer rounded-lg hover:bg-gray-200 font-medium"
           >
             <FaGoogle className="text-lg md:text-xl text-red-500" />
