@@ -4,6 +4,7 @@ import { auth, googleProvider } from '../firebase';
 import { signInWithEmailAndPassword, signInWithPopup } from 'firebase/auth';
 import { MdEmail } from "react-icons/md";
 import { FaFingerprint, FaEye, FaGoogle } from "react-icons/fa";
+import { setPersistence, browserLocalPersistence } from "firebase/auth";
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -23,16 +24,23 @@ const Login = () => {
     }
   };
 
-  const handleGoogleLogin = async () => {
-    setError('');
-    try {
-      await signInWithPopup(auth, googleProvider);
-      navigate('/dashboard');
-    } catch (err) {
-      setError('Failed to sign in with Google.');
-      console.error(err);
-    }
-  };
+const handleGoogleLogin = async () => {
+  setError("");
+  try {
+    // persist across tabs/reloads
+    await setPersistence(auth, browserLocalPersistence);
+
+    // popup login
+    await signInWithPopup(auth, googleProvider);
+
+    // success → go to dashboard
+    navigate("/dashboard");
+  } catch (err) {
+    console.error(err);
+    setError("Failed to sign in with Google.");
+    console.log(err)
+  }
+};
 
   return (
     <div className="w-full h-screen flex items-center justify-center bg-white">
