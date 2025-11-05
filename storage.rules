@@ -1,0 +1,29 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    // ---------- User Avatars ----------
+    match /users/{uid}/avatars/{file} {
+      // Anyone can read avatars (optional); only owner can upload
+      allow read: if true;
+      allow write: if isOwner(uid) && request.resource.size < 5 * 1024 * 1024; // 5 MB max
+    }
+
+    // ---------- Project Images ----------
+    match /users/{uid}/projects/{file} {
+      allow read: if true;
+      allow write: if isOwner(uid) && request.resource.size < 10 * 1024 * 1024; // 10 MB max
+    }
+
+    // ---------- Default Deny ----------
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

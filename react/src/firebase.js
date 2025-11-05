@@ -1,8 +1,11 @@
 import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
+import {
+  initializeFirestore,
+  // If you're on an older SDK you might need setLogLevel or getFirestore instead.
+} from "firebase/firestore";
+import { getStorage } from "firebase/storage";
 
-
-console.log("Firebase API Key:", import.meta.env.VITE_FIREBASE_API_KEY);
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -14,5 +17,12 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 
+// ✅ Use more compatible transport; fixes 400 Listen on some networks/proxies/ad blockers
+export const db = initializeFirestore(app, {
+  experimentalAutoDetectLongPolling: true,
+  useFetchStreams: false, // helps in older browsers/extensions
+});
+
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
+export const storage = getStorage(app);
