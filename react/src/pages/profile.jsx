@@ -29,6 +29,11 @@ export default function Profile() {
     e.preventDefault();
     if (!user) return;
 
+    if (!avatarFile) {
+      setError("Please choose a profile picture to continue.");
+      return;
+    }
+
     try {
       setBusy(true);
       let avatarURL = undefined;
@@ -56,8 +61,8 @@ export default function Profile() {
 
       navigate("/dashboard");
     } catch (err) {
-      console.error(err);
-      setError("Failed to save profile");
+      console.error("Error saving profile:", err);
+      setError("Failed to save profile. Please try again.");
     } finally {
       setBusy(false);
     }
@@ -65,10 +70,14 @@ export default function Profile() {
 
   return (
     <div className="w-full h-screen flex items-center justify-center bg-white">
-      <div className="w-[90%] max-w-sm md:max-w-md p-8 bg-white flex-col flex items-center gap-5 rounded-xl shadow-lg border border-gray-200">
+      <div className="w-[90%] max-w-sm md:max-w-md p-8 bg-white flex-col flex items-center gap-5 rounded-xl shadow-lg border border-gray-200 relative z-10">
         <h1 className="text-3xl font-bold text-gray-900">Set up your profile</h1>
 
-        {error && <p className="text-red-500 text-sm">{error}</p>}
+        {error && (
+          <div className="w-full p-3 bg-red-50 border border-red-200 text-red-600 rounded-lg text-sm text-center">
+            {error}
+          </div>
+        )}
 
         <form onSubmit={onSubmit} className="w-full flex flex-col gap-4 mt-3">
           <input
@@ -97,15 +106,40 @@ export default function Profile() {
           <button
             type="submit"
             disabled={busy}
-            className="w-full p-3 bg-green-600 text-white rounded-lg mt-2 hover:bg-green-700 font-medium disabled:opacity-60"
+            className="w-full p-3 bg-green-600 text-white rounded-lg mt-2 hover:bg-green-700 font-medium disabled:opacity-60 cursor-pointer"
           >
             {busy ? "Saving..." : "Save profile"}
           </button>
         </form>
 
-        <p className="text-sm text-gray-500">
-          <Link to="/dashboard" className="text-green-600 hover:underline">Skip for now</Link>
-        </p>
+        <div className="text-sm text-gray-500 mt-4">
+          <button
+            type="button"
+            onClick={async () => {
+              if (!user) return;
+              try {
+                setBusy(true);
+                await setDoc(doc(db, "users", user.uid), {
+                  uid: user.uid,
+                  email: user.email,
+                  createdAt: serverTimestamp(),
+                  updatedAt: serverTimestamp(),
+                  skippedProfile: true // Optional flag to know they skipped
+                }, { merge: true });
+                navigate("/dashboard");
+              } catch (err) {
+                console.error("Error skipping profile:", err);
+                setError("Failed to skip. Please try again.");
+              } finally {
+                setBusy(false);
+              }
+            }}
+            className="text-green-600 hover:underline cursor-pointer bg-transparent border-none p-0 z-50 relative"
+            disabled={busy}
+          >
+            {busy ? "Skipping..." : "Skip for now"}
+          </button>
+        </div>
       </div>
     </div>
   );

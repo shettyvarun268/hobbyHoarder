@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { auth, googleProvider } from '../firebase';
+import { auth, googleProvider, db } from '../firebase';
 import { signInWithEmailAndPassword, signInWithPopup } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
 import { MdEmail } from "react-icons/md";
 import { FaFingerprint, FaEye, FaGoogle } from "react-icons/fa";
 import { setPersistence, browserLocalPersistence } from "firebase/auth";
@@ -12,12 +13,28 @@ const Login = () => {
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
+  const checkProfileAndNavigate = async (user) => {
+    try {
+      const docRef = doc(db, "users", user.uid);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        navigate('/dashboard');
+      } else {
+        navigate('/profile');
+      }
+    } catch (err) {
+      console.error("Error checking profile:", err);
+      // Fallback to dashboard if check fails
+      navigate('/dashboard');
+    }
+  };
+
   const handleEmailLogin = async (e) => {
     e.preventDefault();
     setError('');
     try {
-      await signInWithEmailAndPassword(auth, email, password);
-      navigate('/dashboard');
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      await checkProfileAndNavigate(userCredential.user);
     } catch (err) {
       setError('Failed to sign in. Please check your credentials.');
       console.error(err);
@@ -31,10 +48,10 @@ const handleGoogleLogin = async () => {
     await setPersistence(auth, browserLocalPersistence);
 
     // popup login
-    await signInWithPopup(auth, googleProvider);
+    const result = await signInWithPopup(auth, googleProvider);
 
-    // success → go to dashboard
-    navigate("/dashboard");
+    // success → check profile
+    await checkProfileAndNavigate(result.user);
   } catch (err) {
     console.error(err);
     setError("Failed to sign in with Google.");

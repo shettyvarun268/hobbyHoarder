@@ -1,17 +1,29 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { auth, db, storage } from "../firebase";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { useNavigate } from "react-router-dom";
+import { onAuthStateChanged } from "firebase/auth";
 
 export default function ProjectNew() {
-  const user = auth.currentUser;
+  const [user, setUser] = useState(null); // Manage user state
   const navigate = useNavigate();
   const [title, setTitle] = useState("");
   const [hobby, setHobby] = useState("");
   const [image, setImage] = useState(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+
+  // Listen for auth state changes
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      if (!currentUser) {
+        navigate('/login'); // Redirect if not authenticated
+      }
+    });
+    return () => unsubscribe();
+  }, [navigate]);
 
   const onSubmit = async (e) => {
     e.preventDefault();
@@ -20,15 +32,29 @@ export default function ProjectNew() {
 
     try {
       setBusy(true);
+      console.log("Starting project creation...");
 
       let imageURL = "";
       if (image) {
+        console.log("Image selected, starting upload...");
         const path = `users/${user.uid}/projects/${Date.now()}-${image.name}`;
+        console.log("Upload path:", path);
         const storageRef = ref(storage, path);
-        await uploadBytes(storageRef, image);
-        imageURL = await getDownloadURL(storageRef);
+        try {
+          await uploadBytes(storageRef, image);
+          console.log("Upload successful, getting download URL...");
+          imageURL = await getDownloadURL(storageRef);
+          console.log("Got download URL:", imageURL);
+        } catch (uploadError) {
+          console.error("Error during image upload:", uploadError);
+          throw new Error("Image upload failed: " + uploadError.message);
+        }
+      } else {
+        console.log("No image selected, skipping upload.");
       }
 
+      console.log("Creating firestore document...");
+      console.log("user.uid:", user.uid);
       await addDoc(collection(db, "users", user.uid, "projects"), {
         title,
         hobby,
@@ -36,11 +62,11 @@ export default function ProjectNew() {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
-
+      console.log("Document created successfully");
       navigate("/dashboard");
     } catch (err) {
-      console.error(err);
-      setError("Failed to create project");
+      console.error("Error in onSubmit:", err);
+      setError("Failed to create project: " + err.message);
     } finally {
       setBusy(false);
     }
