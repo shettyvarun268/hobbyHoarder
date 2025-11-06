@@ -3,6 +3,7 @@ import { getAuth, GoogleAuthProvider } from "firebase/auth";
 import {
   initializeFirestore,
   // If you're on an older SDK you might need setLogLevel or getFirestore instead.
+  enableIndexedDbPersistence,
 } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
@@ -22,6 +23,9 @@ export const db = initializeFirestore(app, {
   experimentalAutoDetectLongPolling: true,
   useFetchStreams: false, // helps in older browsers/extensions
 });
+
+// Optional offline persistence; ignore failures (unsupported browsers, multiple tabs)
+enableIndexedDbPersistence(db).catch(() => {});
 
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();

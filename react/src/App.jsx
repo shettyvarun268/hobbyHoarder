@@ -4,6 +4,8 @@ import Register from "./pages/Register";
 import Dashboard from "./pages/Dashboard";
 import Profile from "./pages/profile";
 import ProjectNew from "./pages/ProjectNew";
+import ProjectDetail from "./pages/ProjectDetail";
+import ProjectEdit from "./pages/ProjectEdit";
 import ProtectedRoute from "./components/ProtectecRoutes"; // <— guard
 
 export default function App() {
@@ -34,6 +36,22 @@ export default function App() {
           element={
             <ProtectedRoute>
               <ProjectNew />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/projects/:id"
+          element={
+            <ProtectedRoute>
+              <ProjectDetail />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/projects/:id/edit"
+          element={
+            <ProtectedRoute>
+              <ProjectEdit />
             </ProtectedRoute>
           }
         />
