@@ -6,11 +6,15 @@ import Profile from "./pages/profile";
 import ProjectNew from "./pages/ProjectNew";
 import ProjectDetail from "./pages/ProjectDetail";
 import ProjectEdit from "./pages/ProjectEdit";
-import ProtectedRoute from "./components/ProtectecRoutes"; // <— guard
+import ProtectedRoute from "./components/ProtectecRoutes";
+import Explore from "./pages/Explore";
+
+import ErrorBoundary from "./components/ErrorBoundary";
 
 export default function App() {
   return (
     <Router>
+      <ErrorBoundary>
       <Routes>
         <Route path="/" element={<Login />} />
         <Route path="/register" element={<Register />} />
@@ -55,7 +59,16 @@ export default function App() {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="/explore"
+          element={
+            <ProtectedRoute>
+              <Explore />
+            </ProtectedRoute>
+          }
+        />
       </Routes>
+      </ErrorBoundary>
     </Router>
   );
 }

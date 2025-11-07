@@ -1,15 +1,16 @@
 import { useEffect, useState } from "react";
-import { auth, db, storage } from "../firebase";
+import { auth, db } from "../firebase";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+// Text-only profile; image upload removed
 import { useNavigate, Link } from "react-router-dom";
+import { toast } from "../components/ui/Toast";
 
 export default function Profile() {
   const user = auth.currentUser;
   const navigate = useNavigate();
   const [displayName, setDisplayName] = useState("");
   const [hobbies, setHobbies] = useState(""); // comma-separated for MVP
-  const [avatarFile, setAvatarFile] = useState(null);
+  // const [avatarFile, setAvatarFile] = useState(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -29,20 +30,9 @@ export default function Profile() {
     e.preventDefault();
     if (!user) return;
 
-    if (!avatarFile) {
-      setError("Please choose a profile picture to continue.");
-      return;
-    }
-
     try {
       setBusy(true);
-      let avatarURL = undefined;
-
-      if (avatarFile) {
-        const storageRef = ref(storage, `users/${user.uid}/avatars/${avatarFile.name}`);
-        await uploadBytes(storageRef, avatarFile);
-        avatarURL = await getDownloadURL(storageRef);
-      }
+      // No avatar upload
 
       const hobbiesArr = hobbies
         .split(",")
@@ -53,7 +43,6 @@ export default function Profile() {
         uid: user.uid,
         email: user.email,
         displayName: displayName || user.displayName || "",
-        avatarURL: avatarURL || undefined,
         hobbies: hobbiesArr,
         updatedAt: serverTimestamp(),
         createdAt: serverTimestamp(),
@@ -96,12 +85,7 @@ export default function Profile() {
             className="border border-gray-300 rounded-lg px-3 py-2"
           />
 
-          <input
-            type="file"
-            accept="image/*"
-            onChange={(e) => setAvatarFile(e.target.files?.[0] || null)}
-            className="border border-gray-300 rounded-lg px-3 py-2"
-          />
+          {/* Avatar upload removed for text-only mode */}
 
           <button
             type="submit"

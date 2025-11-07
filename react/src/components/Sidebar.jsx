@@ -8,6 +8,14 @@ export default function Sidebar() {
     <aside className="hidden md:flex md:w-60 shrink-0 flex-col border-r h-screen sticky top-0 bg-white">
       <nav className="p-4 space-y-1">
         <NavLink
+          to="/explore"
+          className={({ isActive }) =>
+            `${linkBase} ${isActive ? "bg-gray-100 text-gray-900" : ""}`
+          }
+        >
+          Explore
+        </NavLink>
+        <NavLink
           to="/dashboard"
           className={({ isActive }) =>
             `${linkBase} ${isActive ? "bg-gray-100 text-gray-900" : ""}`
@@ -36,4 +44,3 @@ export default function Sidebar() {
     </aside>
   );
 }
-

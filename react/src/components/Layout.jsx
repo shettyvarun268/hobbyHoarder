@@ -1,11 +1,13 @@
 import Navbar from "./Navbar";
 import Sidebar from "./Sidebar";
 import ToastContainer from "./ui/Toast";
+import OnlineStatus from "./OnlineStatus";
 
 export default function Layout({ children }) {
   return (
     <div className="min-h-screen bg-white">
       <Navbar />
+      <OnlineStatus />
       <div className="mx-auto max-w-7xl">
         <div className="md:flex">
           <Sidebar />

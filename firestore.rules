@@ -17,6 +17,22 @@ service cloud.firestore {
           allow create, update, delete: if isOwner(uid);
         }
       }
+
+      // Allow owner to manage notification tokens
+      match /tokens/{tokenId} {
+        allow read, create, update, delete: if isOwner(uid);
+      }
+    }
+
+    // Global public feed (read-only for everyone; writes only by owner)
+    match /publicPosts/{projectId} {
+      allow read: if true;
+      allow create, update, delete: if isSignedIn() && (
+        // new data explicitly claims uid matches auth
+        (request.resource != null && request.resource.data.uid == request.auth.uid) ||
+        // or existing doc is owned by auth
+        (resource != null && resource.data.uid == request.auth.uid)
+      );
     }
   }
 }

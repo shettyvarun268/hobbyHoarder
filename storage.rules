@@ -11,21 +11,20 @@ service firebase.storage {
 
     // ---------- User Avatars ----------
     match /users/{uid}/avatars/{file} {
-      // Anyone can read avatars (optional); only owner can upload
-      allow read: if true;
-      allow write: if isOwner(uid) && isImage() && request.resource.size < 5 * 1024 * 1024; // 5 MB max
+      allow read: if true; // public read avatars
+      allow write: if isOwner(uid) && isImage() && request.resource.size < 10 * 1024 * 1024; // 10 MB
     }
 
     // ---------- Project Images ----------
     match /users/{uid}/projects/{file} {
       allow read: if true;
-      allow write: if isOwner(uid) && isImage() && request.resource.size < 10 * 1024 * 1024; // 10 MB max
+      allow write: if isOwner(uid) && isImage() && request.resource.size < 10 * 1024 * 1024; // 10 MB
     }
 
     // ---------- Project Log Images ----------
     match /users/{uid}/projects/{projectId}/logs/{file} {
       allow read: if true;
-      allow write: if isOwner(uid) && isImage() && request.resource.size < 10 * 1024 * 1024;
+      allow write: if isOwner(uid) && isImage() && request.resource.size < 10 * 1024 * 1024; // 10 MB
     }
 
     // ---------- Default Deny ----------

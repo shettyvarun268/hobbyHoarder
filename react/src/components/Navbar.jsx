@@ -2,6 +2,8 @@ import { useEffect, useState, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { auth } from "../firebase";
+import { requestPermission, getToken as getFcmToken, subscribeUser } from "../lib/notify";
+import { toast } from "./ui/Toast";
 
 function initialsFromUser(user) {
   if (!user) return "";
@@ -16,12 +18,19 @@ function initialsFromUser(user) {
 export default function Navbar() {
   const [user, setUser] = useState(null);
   const [open, setOpen] = useState(false);
+  const [perm, setPerm] = useState(typeof Notification !== "undefined" ? Notification.permission : "default");
   const navigate = useNavigate();
   const menuRef = useRef(null);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (u) => setUser(u));
     return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    if (typeof Notification !== "undefined") {
+      setPerm(Notification.permission);
+    }
   }, []);
 
   useEffect(() => {
@@ -71,6 +80,25 @@ export default function Navbar() {
 
         {open && (
           <div className="absolute right-0 mt-2 w-44 bg-white border rounded-lg shadow-lg py-1 z-50">
+            {perm !== "granted" && (
+              <button
+                className="block w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                onClick={async () => {
+                  setOpen(false);
+                  const p = await requestPermission();
+                  setPerm(p);
+                  if (p === "granted" && user) {
+                    const token = await getFcmToken();
+                    if (token) {
+                      await subscribeUser(user.uid, token);
+                      toast("Notifications enabled");
+                    }
+                  }
+                }}
+              >
+                Enable Notifications
+              </button>
+            )}
             <button
               className="block w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
               onClick={() => {

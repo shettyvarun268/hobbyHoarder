@@ -6,6 +6,11 @@ import { doc, onSnapshot, updateDoc, serverTimestamp } from "firebase/firestore"
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import Layout from "../components/Layout";
 import Button from "../components/ui/Button";
+import { generatePlan as aiGeneratePlan, normalizePlan } from "../lib/ai";
+import { toast } from "../components/ui/Toast";
+import { useMemo } from "react";
+import { normalizeSteps } from "../lib/plan";
+import MilestoneProgress from "../components/MilestoneProgress";
 
 export default function ProjectEdit() {
   const { id } = useParams();
@@ -22,6 +27,9 @@ export default function ProjectEdit() {
   const [busy, setBusy] = useState(false);
   const [titleErr, setTitleErr] = useState("");
   const [hobbyErr, setHobbyErr] = useState("");
+  const [plan, setPlan] = useState([]);
+  const [planning, setPlanning] = useState(false);
+  const cleanPlan = useMemo(() => normalizeSteps(plan), [plan]);
 
   // Track user
   useEffect(() => {
@@ -125,6 +133,22 @@ export default function ProjectEdit() {
     }
   };
 
+  const onSuggestPlan = async () => {
+    setPlanning(true);
+    try {
+      const res = await aiGeneratePlan(title, hobby);
+      const steps = res?.steps || [];
+      setPlan(steps);
+      if (steps.length) toast("Plan generated");
+      else toast("No steps returned");
+    } catch (e) {
+      console.error(e);
+      toast("Failed to generate plan");
+    } finally {
+      setPlanning(false);
+    }
+  };
+
   return (
     <Layout>
       <div className="w-full flex items-center justify-center">
@@ -143,6 +167,7 @@ export default function ProjectEdit() {
               <div className="mt-3 h-5 w-1/3 bg-gray-100 rounded animate-pulse" />
             </div>
           ) : (
+            <>
             <form onSubmit={onSave} className="w-full flex flex-col gap-4">
               <div>
                 <input
@@ -185,12 +210,35 @@ export default function ProjectEdit() {
                   className="w-full border border-gray-300 rounded-lg px-3 py-2"
                 />
               </div>
-              <div className="pt-2">
-                <Button type="submit" disabled={busy} className="w-full">
+              <div className="pt-2 flex items-center gap-2">
+                <Button type="submit" disabled={busy} className="w-full md:w-auto">
                   {busy ? "Saving..." : "Save changes"}
+                </Button>
+                <Button
+                  type="button"
+                  disabled={planning}
+                  onClick={onSuggestPlan}
+                  className="bg-gray-900 hover:bg-gray-800 md:w-auto w-full"
+                >
+                  {planning ? "Generating..." : "Suggest Plan"}
                 </Button>
               </div>
             </form>
+
+            {cleanPlan.length > 0 && (
+              <div className="mt-4 border border-gray-200 rounded-lg p-4 bg-white">
+                <h2 className="font-semibold text-gray-900 mb-2">Suggested plan</h2>
+                <ol className="list-decimal ml-5 space-y-2 text-sm text-gray-700">
+                  {cleanPlan.map((step, idx) => (
+                    <li key={idx}>{step}</li>
+                  ))}
+                </ol>
+                <div className="mt-4">
+                  <MilestoneProgress items={useMemo(() => normalizePlan(plan), [plan])} />
+                </div>
+              </div>
+            )}
+            </>
           )}
         </div>
       </div>

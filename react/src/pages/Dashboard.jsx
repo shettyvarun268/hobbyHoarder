@@ -187,30 +187,54 @@ export default function Dashboard() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {visibleProjects.map((p) => (
               <div key={p.id} className="border rounded-lg p-4 bg-white">
-                {p.imageURL ? (
-                  <Link to={`/projects/${p.id}`}>
-                    <img
-                      src={p.imageURL}
-                      alt={p.title}
-                      className="w-full h-40 object-cover rounded-md mb-3"
-                    />
-                  </Link>
-                ) : (
-                  <Link to={`/projects/${p.id}`} className="block">
-                    <div className="w-full h-40 rounded-md bg-gray-100 mb-3" />
-                  </Link>
-                )}
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <Link to={`/projects/${p.id}`} className="hover:underline">
-                      <h3 className="font-semibold text-gray-900">{p.title}</h3>
-                    </Link>
-                    <p className="text-sm text-gray-500">{p.hobby}</p>
-                    {p.createdAt && (
-                      <p className="text-xs text-gray-400 mt-1">{formatDate(p.createdAt)}</p>
-                    )}
+              {p.imageURL ? (
+                <Link to={`/projects/${p.id}`}>
+                  <img
+                    src={p.imageURL}
+                    alt={p.title}
+                    onError={(e) => { e.currentTarget.src = ""; e.currentTarget.style.display = "none"; }}
+                    className="w-full h-40 object-cover rounded-md mb-3"
+                  />
+                </Link>
+              ) : (
+                <Link to={`/projects/${p.id}`} className="block">
+                  <div className="w-full h-20 rounded-md bg-gray-50 mb-3 flex items-center justify-center text-gray-400 text-sm">
+                    View details
                   </div>
-                  <div className="relative">
+                </Link>
+              )}
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <Link to={`/projects/${p.id}`} className="hover:underline">
+                    <h3 className="font-semibold text-gray-900">{p.title}</h3>
+                  </Link>
+                  <p className="text-sm text-gray-500">{p.hobby}</p>
+                  {p.createdAt && (
+                    <p className="text-xs text-gray-400 mt-1">{formatDate(p.createdAt)}</p>
+                  )}
+                  {/* Condensed progress */}
+                  {Array.isArray(p.plan) && p.plan.length > 0 && (
+                    <div className="mt-2">
+                      {(() => {
+                        const total = p.plan.length;
+                        const completed = p.plan.filter((m) => m?.done).length;
+                        const pct = Math.min(100, Math.round((completed / total) * 100));
+                        return (
+                          <>
+                            <div className="h-2 bg-gray-200 rounded-full">
+                              <div
+                                className="h-2 bg-green-600 rounded-full"
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
+                            <div className="mt-1 text-xs text-gray-500">{completed}/{total} milestones</div>
+                          </>
+                        );
+                      })()}
+                    </div>
+                  )}
+                </div>
+                <div className="relative">
                     <button
                       className="w-8 h-8 rounded-full flex items-center justify-center text-gray-600 hover:text-gray-900"
                       onClick={() => setMenuOpenId((cur) => (cur === p.id ? null : p.id))}

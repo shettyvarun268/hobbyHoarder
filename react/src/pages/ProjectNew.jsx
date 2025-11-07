@@ -1,12 +1,16 @@
 import { useState, useEffect } from "react";
-import { auth, db, storage } from "../firebase";
+import { auth, db } from "../firebase";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { uploadProjectImage } from "../lib/storage";
 import { useNavigate } from "react-router-dom";
 import { onAuthStateChanged } from "firebase/auth";
 import Layout from "../components/Layout";
 import Button from "../components/ui/Button";
 import { toast } from "../components/ui/Toast";
+import { generatePlan as aiGeneratePlan, normalizePlan } from "../lib/ai";
+import { useMemo } from "react";
+import { normalizeSteps } from "../lib/plan";
+import PlanProgress from "../components/PlanProgress";
 
 export default function ProjectNew() {
   const [user, setUser] = useState(null);
@@ -53,14 +57,19 @@ export default function ProjectNew() {
 
     try {
       setBusy(true);
+      // Optional image upload
       let imageURL = "";
       let imagePath = "";
-      if (image) {
-        const path = `users/${user.uid}/projects/${Date.now()}-${image.name}`;
-        const storageRef = ref(storage, path);
-        await uploadBytes(storageRef, image);
-        imageURL = await getDownloadURL(storageRef);
-        imagePath = path;
+      try {
+        if (image) {
+          console.log("[ProjectNew] Upload image start", { name: image.name, size: image.size, type: image.type });
+          const { imageURL: url, imagePath: path } = await uploadProjectImage(user.uid, image);
+          imageURL = url || "";
+          imagePath = path || "";
+          if (imageURL) toast("Image uploaded");
+        }
+      } catch (e) {
+        console.warn("Image upload failed; continuing without image", e);
       }
 
       await addDoc(collection(db, "users", user.uid, "projects"), {
@@ -68,6 +77,7 @@ export default function ProjectNew() {
         hobby,
         imageURL,
         imagePath,
+        plan: milestones,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
@@ -81,30 +91,43 @@ export default function ProjectNew() {
     }
   };
 
-  // Placeholder GenAI stub: returns a static 5-step plan
-  async function generatePlan(inputTitle, inputHobby) {
-    const t = (inputTitle || "Project").trim();
-    const h = (inputHobby || "hobby").trim();
-    return [
-      `Define goals for ${t} in ${h}`,
-      `Gather materials/tools needed for ${h}`,
-      `Break ${t} into 3 milestones`,
-      `Schedule practice sessions and checkpoints`,
-      `Review progress and share updates`,
-    ];
-  }
-
   const onSuggestPlan = async () => {
     setPlanning(true);
     try {
-      const steps = await generatePlan(title, hobby);
-      setPlan(steps);
+      const res = await aiGeneratePlan(title, hobby);
+      const raw = res?.steps ?? res;
+      let normalized = normalizePlan(raw);
+      const hasReal = normalized.some((m) => typeof m.long === "string" && !/^Milestone \d+:/.test(m.long));
+      if (!hasReal && Array.isArray(raw) && raw.length) {
+        // Fallback: coerce raw strings/objects to milestones without padding dominating
+        normalized = raw.slice(0, 5).map((s, i) => {
+          const textSrc = (s && typeof s === "object")
+            ? (s.long ?? s.detail ?? s.title ?? s.short ?? s.text ?? s.content)
+            : s;
+          const text = String(textSrc ?? s ?? "Step " + (i + 1));
+          const short = text.length > 60 ? text.slice(0, 57) + "…" : text;
+          return { id: `m${i}`, short, long: text, done: false };
+        });
+        while (normalized.length < 5) {
+          const i = normalized.length;
+          const text = `Milestone ${i + 1}: Set a concrete, achievable sub-goal and outline tasks.`;
+          const short = text.length > 60 ? text.slice(0, 57) + "…" : text;
+          normalized.push({ id: `m${i}`, short, long: text, done: false });
+        }
+      }
+      setPlan(normalized);
+      if (normalized.length) toast("Plan generated");
+      else toast("No steps returned");
     } catch (e) {
       console.error(e);
+      toast("Failed to generate plan");
     } finally {
       setPlanning(false);
     }
   };
+
+  const milestones = useMemo(() => (Array.isArray(plan) && plan[0]?.id ? plan : normalizePlan(plan)), [plan]);
+  const listItems = useMemo(() => milestones.map((m)=> String(m.long ?? "")), [milestones]);
 
   return (
     <Layout>
@@ -167,14 +190,24 @@ export default function ProjectNew() {
             </div>
           </form>
 
-          {plan.length > 0 && (
+          {listItems.length > 0 && (
             <div className="mt-4 border border-gray-200 rounded-lg p-4 bg-white">
               <h2 className="font-semibold text-gray-900 mb-2">Suggested plan</h2>
-              <ol className="list-decimal list-inside space-y-1 text-sm text-gray-700">
-                {plan.map((step, idx) => (
+              <ol className="list-decimal ml-5 space-y-2 text-sm text-gray-700">
+                {listItems.map((step, idx) => (
                   <li key={idx}>{step}</li>
                 ))}
               </ol>
+              <div className="mt-4">
+                <PlanProgress
+                  plan={milestones}
+                  onToggle={(i) =>
+                    setPlan((prev) =>
+                      (prev || []).map((p, idx) => (idx === i ? { ...p, done: !p.done } : p))
+                    )
+                  }
+                />
+              </div>
             </div>
           )}
         </div>
