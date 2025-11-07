@@ -11,7 +11,7 @@ import {
   serverTimestamp,
   deleteDoc,
 } from "firebase/firestore";
-import { getDocs, writeBatch } from "firebase/firestore";
+import { getDocs, getDoc, writeBatch } from "firebase/firestore";
 import { ref, deleteObject } from "firebase/storage";
 import { uploadLogImage } from "../lib/storage";
 import { auth, db, storage } from "../firebase";
@@ -33,6 +33,7 @@ export default function ProjectDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [isPublic, setIsPublic] = useState(false);
+  const [ownerUid, setOwnerUid] = useState(null);
   const [plan, setPlan] = useState([]);
   const [planning, setPlanning] = useState(false);
   // Controls whether the persisted Plan & Progress bar is shown in this session
@@ -40,6 +41,7 @@ export default function ProjectDetail() {
   const milestones = useMemo(() => (Array.isArray(plan) && (plan[0]?.id) ? plan : normalizePlan(plan)), [plan]);
   // Render list directly from milestone.long to avoid object artifacts
   const listItems = useMemo(() => milestones.map((m) => String(m.long ?? "")), [milestones]);
+  const isOwner = useMemo(() => !!(user && ownerUid && user.uid === ownerUid), [user, ownerUid]);
 
   // Determine if the persisted plan contains real (non-placeholder) steps
   const hasRealPersisted = useMemo(() => {
@@ -48,8 +50,13 @@ export default function ProjectDetail() {
     return arr.some((m) => typeof m?.long === "string" && !/^Milestone \d+:/.test(m.long));
   }, [project]);
 
+  // If a project already has a real plan, auto-show the progress bar on load
+  useEffect(() => {
+    if (hasRealPersisted) setShowProgress(true);
+  }, [hasRealPersisted]);
+
   const deleteProject = async () => {
-    if (!user || !project) return;
+    if (!user || !project || !isOwner) return;
     const ok = window.confirm("Delete this project and all its logs? This cannot be undone.");
     if (!ok) return;
     try {
@@ -90,66 +97,94 @@ export default function ProjectDetail() {
     return () => unsub();
   }, [navigate]);
 
-  // Subscribe to project and logs
+  // Subscribe to project and logs, resolving owner via publicPosts when needed
   useEffect(() => {
     if (!user || !id) return;
     setLoading(true);
     setError("");
 
-    const projectRef = doc(db, "users", user.uid, "projects", id);
-    const unsubProject = onSnapshot(
-      projectRef,
-      (snap) => {
-        if (!snap.exists()) {
-          setError("Project not found.");
-          setProject(null);
-          setLoading(false);
-          return;
-        }
-        const data = snap.data();
-        const proj = { id: snap.id, ...data };
-        setProject(proj);
-        setLoading(false);
+    let unsubProject = () => {};
+    let unsubLogs = () => {};
+    let unsubPublic = () => {};
+    let active = true;
 
-        // Normalize any legacy plan (e.g., 3-step) to 5 steps and persist once
+    (async () => {
+      try {
+        const publicRef = doc(db, "publicPosts", id);
+        let owner = user.uid;
         try {
-          if (Array.isArray(proj.plan) && proj.plan.length !== 5) {
-            const fixed = normalizePlan(proj.plan);
-            if (JSON.stringify(fixed) !== JSON.stringify(proj.plan)) {
-              updateDoc(projectRef, { plan: fixed, updatedAt: serverTimestamp() }).catch(() => {});
-            }
+          const pubSnap = await getDoc(publicRef);
+          if (pubSnap.exists()) {
+            const d = pubSnap.data();
+            if (d?.uid) owner = d.uid;
           }
-        } catch (e) {
-          // ignore normalization errors (e.g., offline)
+        } catch {
+          // ignore public doc read errors
         }
-      },
-      (e) => {
+        if (!active) return;
+        setOwnerUid(owner);
+
+        const projectRef = doc(db, "users", owner, "projects", id);
+        unsubProject = onSnapshot(
+          projectRef,
+          (snap) => {
+            if (!snap.exists()) {
+              setProject(null);
+              setLoading(false);
+              // If viewing someone else's project and it's unavailable, show friendly error
+              if (owner !== user.uid) setError("Project unavailable.");
+              else setError("Project not found.");
+              return;
+            }
+            const data = snap.data();
+            const proj = { id: snap.id, ...data };
+            setProject(proj);
+            setLoading(false);
+
+            // Normalize any legacy plan (e.g., 3-step) to 5 steps and persist once (owners only)
+            try {
+              if (owner === user.uid && Array.isArray(proj.plan) && proj.plan.length !== 5) {
+                const fixed = normalizePlan(proj.plan);
+                if (JSON.stringify(fixed) !== JSON.stringify(proj.plan)) {
+                  updateDoc(projectRef, { plan: fixed, updatedAt: serverTimestamp() }).catch(() => {});
+                }
+              }
+            } catch (e) {
+              // ignore normalization errors (e.g., offline)
+            }
+          },
+          (e) => {
+            console.error(e);
+            setError("Failed to load project.");
+            setLoading(false);
+          }
+        );
+
+        const logsRef = collection(db, "users", owner, "projects", id, "logs");
+        const ql = query(logsRef, orderBy("createdAt", "desc"));
+        unsubLogs = onSnapshot(
+          ql,
+          (snap) => setLogs(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+          (e) => console.error("logs error", e)
+        );
+
+        unsubPublic = onSnapshot(
+          publicRef,
+          (snap) => setIsPublic(snap.exists()),
+          () => {}
+        );
+      } catch (e) {
         console.error(e);
         setError("Failed to load project.");
         setLoading(false);
       }
-    );
-
-    const logsRef = collection(db, "users", user.uid, "projects", id, "logs");
-    const ql = query(logsRef, orderBy("createdAt", "desc"));
-    const unsubLogs = onSnapshot(
-      ql,
-      (snap) => setLogs(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
-      (e) => console.error("logs error", e)
-    );
-
-    // Watch public post state
-    const publicRef = doc(db, "publicPosts", id);
-    const unsubPublic = onSnapshot(
-      publicRef,
-      (snap) => setIsPublic(snap.exists()),
-      () => {}
-    );
+    })();
 
     return () => {
-      unsubProject();
-      unsubLogs();
-      unsubPublic();
+      active = false;
+      try { unsubProject(); } catch {}
+      try { unsubLogs(); } catch {}
+      try { unsubPublic(); } catch {}
     };
   }, [user, id]);
 
@@ -191,7 +226,7 @@ export default function ProjectDetail() {
   };
 
   const onSuggestPlan = async () => {
-    if (!project) return;
+    if (!project || !isOwner) return;
     setPlanning(true);
     try {
       const res = await aiGeneratePlan(project.title || "Project", project.hobby || "");
@@ -258,7 +293,7 @@ export default function ProjectDetail() {
 
   const onAddLog = async (e) => {
     e.preventDefault();
-    if (!user || !id) return;
+    if (!user || !id || !isOwner) return;
     setTextErr("");
     if (!text.trim()) {
       setTextErr("Log text is required.");
@@ -295,7 +330,7 @@ export default function ProjectDetail() {
   };
 
   const onDeleteLog = async (logId) => {
-    if (!user || !id) return;
+    if (!user || !id || !isOwner) return;
     const ok = window.confirm("Delete this log?");
     if (!ok) return;
     try {
@@ -347,25 +382,31 @@ export default function ProjectDetail() {
               <p className="text-xs text-gray-400 mt-1">Created {formatDate(project.createdAt)}</p>
             )}
             <div className="mt-3 flex items-center gap-3 flex-wrap">
-              <label className="inline-flex items-center gap-2 text-sm text-gray-700">
-                <input
-                  type="checkbox"
-                  className="h-4 w-4 rounded border-gray-300"
-                  checked={isPublic}
-                  onChange={(e) => onTogglePublic(e.target.checked)}
-                />
-                Share publicly
-              </label>
-              <Button type="button" disabled={planning} onClick={onSuggestPlan} className="px-3 py-1 text-sm">
-                {planning ? "Generating..." : "Suggest Plan"}
-              </Button>
-              <button
-                type="button"
-                onClick={deleteProject}
-                className="px-3 py-1 text-sm text-red-600 border border-red-200 rounded hover:bg-red-50"
-              >
-                Delete Project
-              </button>
+              {isOwner && (
+                <label className="inline-flex items-center gap-2 text-sm text-gray-700">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-gray-300"
+                    checked={isPublic}
+                    onChange={(e) => onTogglePublic(e.target.checked)}
+                  />
+                  Share publicly
+                </label>
+              )}
+              {isOwner && (
+                <Button type="button" disabled={planning} onClick={onSuggestPlan} className="px-3 py-1 text-sm">
+                  {planning ? "Generating..." : "Suggest Plan"}
+                </Button>
+              )}
+              {isOwner && (
+                <button
+                  type="button"
+                  onClick={deleteProject}
+                  className="px-3 py-1 text-sm text-red-600 border border-red-200 rounded hover:bg-red-50"
+                >
+                  Delete Project
+                </button>
+              )}
             </div>
           </div>
 
@@ -387,20 +428,24 @@ export default function ProjectDetail() {
               <h2 className="text-lg font-semibold text-gray-900 mb-2">Plan & Progress</h2>
               <PlanProgress
                 plan={project.plan}
-                onToggle={async (i) => {
-                  try {
-                    const updated = (project.plan || []).map((p, idx) =>
-                      idx === i ? { ...p, done: !p.done } : p
-                    );
-                    await updateDoc(doc(db, "users", user.uid, "projects", id), {
-                      plan: updated,
-                      updatedAt: serverTimestamp(),
-                    });
-                  } catch (e) {
-                    console.error(e);
-                    toast("Failed to update milestone");
-                  }
-                }}
+                onToggle={
+                  isOwner
+                    ? async (i) => {
+                        try {
+                          const updated = (project.plan || []).map((p, idx) =>
+                            idx === i ? { ...p, done: !p.done } : p
+                          );
+                          await updateDoc(doc(db, "users", ownerUid || user.uid, "projects", id), {
+                            plan: updated,
+                            updatedAt: serverTimestamp(),
+                          });
+                        } catch (e) {
+                          console.error(e);
+                          toast("Failed to update milestone");
+                        }
+                      }
+                    : () => {}
+                }
               />
             </section>
           )}
@@ -410,32 +455,34 @@ export default function ProjectDetail() {
         )}
 
         {/* Add log form */}
-        <div className="border rounded-lg p-4 bg-white">
-          <h2 className="font-semibold text-gray-900 mb-3">Add progress log</h2>
-          <form onSubmit={onAddLog} className="space-y-3">
-            <textarea
-              required
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              placeholder="What did you do?"
-              className="w-full min-h-24 border border-gray-300 rounded-lg px-3 py-2 text-sm"
-            />
-            {textErr && (
-              <p className="text-xs text-red-600 -mt-2">{textErr}</p>
-            )}
-            <input
-              type="file"
-              accept="image/*"
-              onChange={(e) => setPhoto(e.target.files?.[0] || null)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-            />
-            <div>
-              <Button type="submit" disabled={submitting}>
-                {submitting ? "Adding..." : "Add log"}
-              </Button>
-            </div>
-          </form>
-        </div>
+        {isOwner && (
+          <div className="border rounded-lg p-4 bg-white">
+            <h2 className="font-semibold text-gray-900 mb-3">Add progress log</h2>
+            <form onSubmit={onAddLog} className="space-y-3">
+              <textarea
+                required
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                placeholder="What did you do?"
+                className="w-full min-h-24 border border-gray-300 rounded-lg px-3 py-2 text-sm"
+              />
+              {textErr && (
+                <p className="text-xs text-red-600 -mt-2">{textErr}</p>
+              )}
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => setPhoto(e.target.files?.[0] || null)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+              />
+              <div>
+                <Button type="submit" disabled={submitting}>
+                  {submitting ? "Adding..." : "Add log"}
+                </Button>
+              </div>
+            </form>
+          </div>
+        )}
 
         {/* Logs list */}
         <div className="space-y-3">
@@ -453,14 +500,16 @@ export default function ProjectDetail() {
                         <p className="text-xs text-gray-400 mt-1">{formatDate(l.createdAt)}</p>
                       )}
                     </div>
-                    <div>
-                      <button
-                        className="text-sm text-red-600 hover:underline"
-                        onClick={() => onDeleteLog(l.id)}
-                      >
-                        Delete
-                      </button>
-                    </div>
+                    {isOwner && (
+                      <div>
+                        <button
+                          className="text-sm text-red-600 hover:underline"
+                          onClick={() => onDeleteLog(l.id)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    )}
                   </div>
                   {l.imageURL && (
                     <img
