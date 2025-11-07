@@ -33,11 +33,13 @@ export default function ProjectDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [isPublic, setIsPublic] = useState(false);
-  const [ownerUid, setOwnerUid] = useState(null);
   const [plan, setPlan] = useState([]);
   const [planning, setPlanning] = useState(false);
   // Controls whether the persisted Plan & Progress bar is shown in this session
   const [showProgress, setShowProgress] = useState(false);
+  // When viewing via Explore, the route :id may be the public doc id — resolve to the actual project doc id
+  const [ownerUid, setOwnerUid] = useState(null);
+  const [projectDocId, setProjectDocId] = useState(null);
   const milestones = useMemo(() => (Array.isArray(plan) && (plan[0]?.id) ? plan : normalizePlan(plan)), [plan]);
   // Render list directly from milestone.long to avoid object artifacts
   const listItems = useMemo(() => milestones.map((m) => String(m.long ?? "")), [milestones]);
@@ -112,28 +114,61 @@ export default function ProjectDetail() {
       try {
         const publicRef = doc(db, "publicPosts", id);
         let owner = user.uid;
+        let candidateId = id;
+        let pubSnap = null;
         try {
-          const pubSnap = await getDoc(publicRef);
+          pubSnap = await getDoc(publicRef);
           if (pubSnap.exists()) {
             const d = pubSnap.data();
             if (d?.uid) owner = d.uid;
+            if (d?.projectId) candidateId = d.projectId;
           }
         } catch {
           // ignore public doc read errors
         }
         if (!active) return;
         setOwnerUid(owner);
+        setProjectDocId(candidateId);
 
-        const projectRef = doc(db, "users", owner, "projects", id);
+        const projectRef = doc(db, "users", owner, "projects", candidateId);
         unsubProject = onSnapshot(
           projectRef,
           (snap) => {
             if (!snap.exists()) {
-              setProject(null);
-              setLoading(false);
-              // If viewing someone else's project and it's unavailable, show friendly error
-              if (owner !== user.uid) setError("Project unavailable.");
-              else setError("Project not found.");
+              // Fallback: if coming from public link, try to locate by matching basic fields
+              const tryFallback = async () => {
+                if (owner === user.uid) {
+                  setProject(null);
+                  setLoading(false);
+                  setError("Project not found.");
+                  return;
+                }
+                const meta = pubSnap?.data?.() || (pubSnap && pubSnap.data());
+                try {
+                  const coll = collection(db, "users", owner, "projects");
+                  const all = await getDocs(coll);
+                  let found = null;
+                  all.forEach((d) => {
+                    const v = d.data();
+                    if (!found) {
+                      const titleMatch = meta?.title && v?.title === meta.title;
+                      const hobbyMatch = meta?.hobby && v?.hobby === meta.hobby;
+                      const imageMatch = meta?.imageURL && v?.imageURL === meta.imageURL;
+                      if ((titleMatch && hobbyMatch) || imageMatch) {
+                        found = { id: d.id };
+                      }
+                    }
+                  });
+                  if (found) {
+                    setProjectDocId(found.id);
+                    return; // effect will re-run and attach listeners to new id
+                  }
+                } catch {}
+                setProject(null);
+                setLoading(false);
+                setError("Project unavailable.");
+              };
+              tryFallback();
               return;
             }
             const data = snap.data();
@@ -160,7 +195,7 @@ export default function ProjectDetail() {
           }
         );
 
-        const logsRef = collection(db, "users", owner, "projects", id, "logs");
+        const logsRef = collection(db, "users", owner, "projects", candidateId, "logs");
         const ql = query(logsRef, orderBy("createdAt", "desc"));
         unsubLogs = onSnapshot(
           ql,
@@ -186,7 +221,7 @@ export default function ProjectDetail() {
       try { unsubLogs(); } catch {}
       try { unsubPublic(); } catch {}
     };
-  }, [user, id]);
+  }, [user, id, projectDocId]);
 
   const formatDate = (ts) => {
     try {
@@ -207,6 +242,7 @@ export default function ProjectDetail() {
           publicRef,
           {
             uid: user.uid,
+            projectId: project.id,
             title: project.title || "",
             hobby: project.hobby || "",
             imageURL: project.imageURL || "",
@@ -267,8 +303,8 @@ export default function ProjectDetail() {
       });
       // Persist the normalized plan so the main progress bar reflects these milestones
       try {
-        if (user && id) {
-          await updateDoc(doc(db, "users", user.uid, "projects", id), {
+        if (user && (projectDocId || id)) {
+          await updateDoc(doc(db, "users", ownerUid || user.uid, "projects", projectDocId || id), {
             plan: normalized,
             updatedAt: serverTimestamp(),
           });
@@ -313,7 +349,7 @@ export default function ProjectDetail() {
           console.warn("Log photo upload failed; saving without photo", e);
         }
       }
-      await addDoc(collection(db, "users", user.uid, "projects", id, "logs"), {
+      await addDoc(collection(db, "users", ownerUid || user.uid, "projects", projectDocId || id, "logs"), {
         text: text.trim(),
         imageURL,
         imagePath,
@@ -342,7 +378,7 @@ export default function ProjectDetail() {
           console.warn("Failed to delete log image", e);
         }
       }
-      await deleteDoc(doc(db, "users", user.uid, "projects", id, "logs", logId));
+      await deleteDoc(doc(db, "users", ownerUid || user.uid, "projects", projectDocId || id, "logs", logId));
     } catch (e) {
       console.error(e);
       setError("Failed to delete log.");
@@ -435,7 +471,7 @@ export default function ProjectDetail() {
                           const updated = (project.plan || []).map((p, idx) =>
                             idx === i ? { ...p, done: !p.done } : p
                           );
-                          await updateDoc(doc(db, "users", ownerUid || user.uid, "projects", id), {
+                          await updateDoc(doc(db, "users", ownerUid || user.uid, "projects", projectDocId || id), {
                             plan: updated,
                             updatedAt: serverTimestamp(),
                           });

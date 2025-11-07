@@ -6,7 +6,6 @@ import {
   onSnapshot,
   orderBy,
   query,
-  where,
   doc,
   deleteDoc,
   getDocs,
@@ -23,7 +22,6 @@ export default function Dashboard() {
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [filterHobby, setFilterHobby] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [sort, setSort] = useState("desc"); // 'desc' | 'asc'
   const [menuOpenId, setMenuOpenId] = useState(null);
@@ -38,14 +36,13 @@ export default function Dashboard() {
     return () => unsub();
   }, [navigate]);
 
-  // Subscribe to projects based on filters
+  // Subscribe to projects
   useEffect(() => {
     if (!user) return;
     setLoading(true);
     setError("");
 
     const constraints = [orderBy("createdAt", sort)];
-    if (filterHobby) constraints.unshift(where("hobby", "==", filterHobby));
 
     const q = query(collection(db, "users", user.uid, "projects"), ...constraints);
     const unsub = onSnapshot(
@@ -62,7 +59,7 @@ export default function Dashboard() {
     );
 
     return () => unsub();
-  }, [user, sort, filterHobby]);
+  }, [user, sort]);
 
   // Client-side search
   const visibleProjects = useMemo(() => {
@@ -137,13 +134,7 @@ export default function Dashboard() {
               placeholder="Search by title"
               className="sm:w-64 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
             />
-            <input
-              type="text"
-              value={filterHobby}
-              onChange={(e) => setFilterHobby(e.target.value)}
-              placeholder="Filter by hobby"
-              className="w-40 border border-gray-300 rounded-lg px-3 py-2 text-sm"
-            />
+            {/* Removed hobby filter input */}
             <select
               value={sort}
               onChange={(e) => setSort(e.target.value)}

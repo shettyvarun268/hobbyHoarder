@@ -7,10 +7,6 @@ import { onAuthStateChanged } from "firebase/auth";
 import Layout from "../components/Layout";
 import Button from "../components/ui/Button";
 import { toast } from "../components/ui/Toast";
-import { generatePlan as aiGeneratePlan, normalizePlan } from "../lib/ai";
-import { useMemo } from "react";
-import { normalizeSteps } from "../lib/plan";
-import PlanProgress from "../components/PlanProgress";
 
 export default function ProjectNew() {
   const [user, setUser] = useState(null);
@@ -22,8 +18,7 @@ export default function ProjectNew() {
   const [busy, setBusy] = useState(false);
   const [titleErr, setTitleErr] = useState("");
   const [hobbyErr, setHobbyErr] = useState("");
-  const [plan, setPlan] = useState([]);
-  const [planning, setPlanning] = useState(false);
+  // Plan generation removed on create page
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -77,7 +72,6 @@ export default function ProjectNew() {
         hobby,
         imageURL,
         imagePath,
-        plan: milestones,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
@@ -91,43 +85,7 @@ export default function ProjectNew() {
     }
   };
 
-  const onSuggestPlan = async () => {
-    setPlanning(true);
-    try {
-      const res = await aiGeneratePlan(title, hobby);
-      const raw = res?.steps ?? res;
-      let normalized = normalizePlan(raw);
-      const hasReal = normalized.some((m) => typeof m.long === "string" && !/^Milestone \d+:/.test(m.long));
-      if (!hasReal && Array.isArray(raw) && raw.length) {
-        // Fallback: coerce raw strings/objects to milestones without padding dominating
-        normalized = raw.slice(0, 5).map((s, i) => {
-          const textSrc = (s && typeof s === "object")
-            ? (s.long ?? s.detail ?? s.title ?? s.short ?? s.text ?? s.content)
-            : s;
-          const text = String(textSrc ?? s ?? "Step " + (i + 1));
-          const short = text.length > 60 ? text.slice(0, 57) + "…" : text;
-          return { id: `m${i}`, short, long: text, done: false };
-        });
-        while (normalized.length < 5) {
-          const i = normalized.length;
-          const text = `Milestone ${i + 1}: Set a concrete, achievable sub-goal and outline tasks.`;
-          const short = text.length > 60 ? text.slice(0, 57) + "…" : text;
-          normalized.push({ id: `m${i}`, short, long: text, done: false });
-        }
-      }
-      setPlan(normalized);
-      if (normalized.length) toast("Plan generated");
-      else toast("No steps returned");
-    } catch (e) {
-      console.error(e);
-      toast("Failed to generate plan");
-    } finally {
-      setPlanning(false);
-    }
-  };
-
-  const milestones = useMemo(() => (Array.isArray(plan) && plan[0]?.id ? plan : normalizePlan(plan)), [plan]);
-  const listItems = useMemo(() => milestones.map((m)=> String(m.long ?? "")), [milestones]);
+  // Suggest Plan UI removed on create page
 
   return (
     <Layout>
@@ -179,37 +137,9 @@ export default function ProjectNew() {
               <Button type="submit" disabled={busy} className="w-full md:w-auto">
                 {busy ? "Creating..." : "Create project"}
               </Button>
-              <Button
-                type="button"
-                disabled={planning}
-                onClick={onSuggestPlan}
-                className="bg-gray-900 hover:bg-gray-800 md:w-auto w-full"
-              >
-                {planning ? "Generating..." : "Suggest Plan"}
-              </Button>
             </div>
           </form>
 
-          {listItems.length > 0 && (
-            <div className="mt-4 border border-gray-200 rounded-lg p-4 bg-white">
-              <h2 className="font-semibold text-gray-900 mb-2">Suggested plan</h2>
-              <ol className="list-decimal ml-5 space-y-2 text-sm text-gray-700">
-                {listItems.map((step, idx) => (
-                  <li key={idx}>{step}</li>
-                ))}
-              </ol>
-              <div className="mt-4">
-                <PlanProgress
-                  plan={milestones}
-                  onToggle={(i) =>
-                    setPlan((prev) =>
-                      (prev || []).map((p, idx) => (idx === i ? { ...p, done: !p.done } : p))
-                    )
-                  }
-                />
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </Layout>

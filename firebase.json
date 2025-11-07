@@ -35,5 +35,22 @@
       ],
       "source": "functions"
     }
-  ]
+  ],
+  "hosting": {
+    "public": "react/dist",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "predeploy": [
+      "npm --prefix \"react\" run build"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
 }
